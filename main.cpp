@@ -9,21 +9,44 @@ using namespace std;
 
 const int MAP_ROWS = 5;
 const int MAP_COLS = 5;
+const int NUM_PUB_SAFETY = 2;
+const int NUM_RA = 2;
+const int NUM_FRIEND = 2;
+const int NUM_TASERS = 2;
+const int NUM_TREASURE = 2;
+
+class Room;
+class Player;
 
 class Hazard {
 public:
     virtual string clue() = 0;
-    virtual void trigger()= 0;
+    virtual bool trigger(vector<vector<Room>>& map, int row, int col, Player& player) = 0;
     virtual char symbol() const = 0;
     virtual ~Hazard() = default;
 };
 
+class Room {
+public:
+    Hazard* hazard = nullptr;
+    class Weapon* weapon = nullptr;
+    bool hasTreasure = false;
+    bool hasPlayer = false;
+};
+class Player {
+public:
+    int row = 0;
+    int col = 0;
+    int tase = 0;
+};
+                   
 class pub_safety_officer : public Hazard {
     string clue() override {
         return "You hear keys jangling";
     }
-    void trigger() override {
-        cout << "You have been caught!\n";
+    bool trigger(vector<vector<Room>> &map, int row, int col, Player&) override {
+        cout << "You have been caught by public safety!\n";
+        return true;
     }
 
     char symbol() const override {
@@ -35,21 +58,35 @@ class RA : public Hazard {
     string clue() override {
         return "You see an RA in the area, but they don't see you...yet";
     }
-    void trigger() override {
-        cout << "The RA has found you!\n";
+    bool trigger(vector<vector<Room>>& map, int row, int col, Player&) override {
+        cout << "You have been caught by an RA\n";
+        return true;
     }
     char symbol() const override {
         return '@';
     }
 };
 
-class nosey_student : public Hazard {
+class best_friend : public Hazard {
     string clue() override {
-        return "You hear a sniffing noise";
+        return "You hear a laugh nearby";
     }
 
-    void trigger() override {
-        cout << "The nosey student has caught you!\n";
+   bool trigger(vector<vector<Room>>& map, int row, int col, Player& player) override {
+        cout << "A friend spots you! They've helped you move to a new safe area!\n" << endl;
+        map[row][col].hazard = nullptr;
+        map[row][col].hasPlayer = false;
+
+        int newR, newC;
+        do {
+            newR = rand() % MAP_ROWS;
+            newC = rand() % MAP_COLS;
+        } while(map[newR][newC].hazard || map[newR][newC].hasPlayer || map[newR][newC].weapon || map[newR][newC].hasTreasure);
+
+        player.row = newR;
+        player.col = newC;
+        map[newR][newC].hasPlayer = true;
+        return false;
     }
 
     char symbol() const override {
@@ -67,26 +104,11 @@ public:
 class Taser : public Weapon {
 public:
     void use() override {
-        cout << "You tased someone!\n";
+        cout << "You tased someone!\n" << endl;
     }
     char symbol() const override {
         return '>';
     }
-};
-
-class Room {
-public:
-    Hazard* hazard = nullptr;
-    Weapon* weapon = nullptr;
-    bool hasTreasure = false;
-    bool hasPlayer = false;
-};
-
-class Player {
-public:
-    int row = 0;
-    int col = 0;
-    int tase = 0;
 };
 
 pair<int, int> getRandomEmptyCell(const vector<vector<Room>>& map) {
@@ -105,31 +127,43 @@ vector<vector<Room>> createMap(Player& player) {
     player.col = 0;
     map[0][0].hasPlayer = true;
 
-    auto[r1, c1] = getRandomEmptyCell(map);
-    map[r1][c1].hazard = new pub_safety_officer();
+    for(int i = 0; i < NUM_PUB_SAFETY; ++i) {
+        map[getRandomEmptyCell(map).first][getRandomEmptyCell(map).second].hazard = new pub_safety_officer();
+    }
 
-    auto[r2, c2] = getRandomEmptyCell(map);
-    map[r2][c2].hazard = new RA();
+    for(int i = 0; i < NUM_RA; ++i) {
+        map[getRandomEmptyCell(map).first][getRandomEmptyCell(map).second].hazard = new RA();
+    }
 
-    auto[r3, c3] = getRandomEmptyCell(map);
-    map[r3][c3].hazard = new nosey_student();
+    for(int i = 0; i < NUM_FRIEND; ++i) {
+        map[getRandomEmptyCell(map).first][getRandomEmptyCell(map).second].hazard = new best_friend();    Weapon* weapon = nullptr;
+    }
 
-    auto [rw, cw] = getRandomEmptyCell(map);
-    map[rw][cw].weapon = new Taser();
+    for(int i = 0; i < NUM_TASERS; ++i) {
+        map[getRandomEmptyCell(map).first][getRandomEmptyCell(map).second].weapon = new Taser();
+    }
 
-    auto[rt, ct] = getRandomEmptyCell(map);
-    map[rt][ct].hasTreasure = true;
+    for(int i = 0; i < NUM_TREASURE; ++i) {
+        map[getRandomEmptyCell(map).first][getRandomEmptyCell(map).second].hasTreasure = true;
+    }
     return map;
 }
 
 void printHelp() {
-    cout << "Welcome to 'Escape Public Safety!'" << endl;
-    cout << "Goal: Avoid the public safety officers and don't get caught!" << endl;
-    cout << "How to avoid? Tase them with a taser" << endl;
-    cout << "Hazards: RA (@), Nosey Student (!), Pub Safety Officer (#)" << endl;
-    cout << "Weapons: Taser (>)" << endl;
-    cout << "Treasure: Extra (?)" << endl;
-    cout << "Controls: N/S/E/W to move, f to blind, m for the map, h for help, q to quit\n" << endl;
+    cout << "Symbols:\n";
+    cout << "\t-Player(you): '+'\n";
+    cout << "\t-Taser: '>'\n";
+    cout << "\t-Hazards: RA (@), Nosey Student (!), Pub Safety Officer (#)" << endl;
+    cout << "\t-Weapons: Taser (>)" << endl;
+    cout << "\t-Treasure: Extra Tasers(?)" << endl;
+
+    cout << "Controls:\n ";
+    cout << "\t-N/S/E/W: for moving\n";
+    cout << "\t-T + direction(n/s/e/w): Tase in those directions\n";
+    cout << "\t-M: View the map\n";
+    cout << "\t-H: Help\n";
+    cout << "\t-Q: Quit\n";
+
 }
 
 void printMap(const vector<vector<Room>>& map) {
@@ -177,38 +211,38 @@ void checkForHazards(Player& player, const vector<vector<Room>>& map) {
 }
 
 bool movePlayer(char direction, Player& player, vector<vector<Room>>& map) {
-    int newRow = player.row;
-    int newCol = player.col;
+    int r = player.row, c = player.col;
+    if(direction == 'n') --r;
+    else if(direction == 's') ++r;
+    else if(direction == 'e') ++c;
+    else if(direction == 'w') --c;
+    else return false;
 
-    switch(direction) {
-        case 'n': newRow--; break;
-        case 's': newRow++; break;
-        case 'e': newCol++; break;
-        case 'w': newCol--; break;
-        default: return false;
+    if(r < 0 || r >= MAP_ROWS || c < 0 || c >= MAP_COLS) {
+        cout << "You can't move this way :(\n";
+        return false;
     }
 
-    if(newRow >= 0 && newRow < MAP_ROWS && newCol >= 0 && newCol < MAP_COLS) {
-        map[player.row][player.col].hasPlayer = false;
-        player.row = newRow;
-        player.col = newCol;
-        map[player.row][player.col].hasPlayer = true;
+    map[player.row][player.col].hasPlayer = false;
+    player.row = r;
+    player.col = c;
+    map[r][c].hasPlayer = true;
 
-        Room& currRoom = map[player.row][player.col];
-        if(currRoom.hazard) {
-            currRoom.hazard->trigger();
-            return true;
-        }
-        if(currRoom.weapon) {
-            cout << "You found a taser!\n";
-            player.tase++;
-            delete currRoom.weapon;
-            currRoom.weapon = nullptr;
-        }
-        checkForHazards(player, map);
-    } else {
-        cout << "You can't move that way\n";
+    Room& room = map[r][c];
+    if(room.hazard && room.hazard->trigger(map, r, c, player)) return true;
+    if(room.weapon) {
+        cout << "You picked up a taser!\n";
+        player.tase++;
+        delete room.weapon;
+        room.weapon = nullptr;
     }
+
+    if(room.hasTreasure) {
+        cout << "You picked up another taser!\n";
+        player.tase++;
+        room.hasTreasure = false;
+    }
+    checkForHazards(player, map);
     return false;
 }
 
@@ -233,8 +267,16 @@ void useTaser(Player& player, vector<vector<Room>>& map, char direction) {
     if(targetRow >= 0 && targetRow < MAP_ROWS && targetCol >= 0 && targetCol < MAP_COLS) {
         Room& room = map[targetRow][targetCol];
         if(room.hazard) {
-            cout << "You tased someone the " << room.hazard->symbol() << "!\n";
-            delete room.hazard;
+            if(room.hazard->symbol() == '@') {
+                cout << "You tased an RA!\n";
+                delete room.hazard;
+            } else if(room.hazard->symbol() == '#') {
+                cout << "You tased a Public Safety Officer!\n";
+                delete room.hazard;
+            } else if(room.hazard->symbol() == '!') {
+                cout << "You tased your friend, that's not cool...\n";
+                delete room.hazard;
+            }
             room.hazard = nullptr;
             player.tase--;
         } else {
@@ -248,6 +290,10 @@ void useTaser(Player& player, vector<vector<Room>>& map, char direction) {
 }
 
 int main() {
+    cout << "Welcome to 'Escape Public Safety!'" << endl;
+    cout << "Goal: Avoid the public safety officers and RAs....and don't get caught!" << endl;
+    cout << "How to avoid? Tase them with a taser and RUN\n" << endl;
+
     srand(static_cast<unsigned>(time(nullptr)));
     bool playing = true;
 
@@ -258,11 +304,12 @@ int main() {
         bool caught = false;
 
         do {
-            cout << "Action: N)orth, S)outh, E)ast, W)est, T)aser, H)elp, Q)uit, M)ap: ";
+            cout << "Tasers: " << player.tase << endl;
+            cout << "Action: N)orth, S)outh, E)ast, W)est,\n T)aser, H)elp, Q)uit, M)ap: ";
             cin >> action;
             action = tolower(action);
 
-            if(action == 'f') {
+            if(action == 't') {
                 char direction;
                 cout << "Choose a direction to tase (n/s/e/w): ";
                 cin >> direction;
@@ -288,6 +335,7 @@ int main() {
                     cout << "That action is not an option.\n";
                     break;
             }
+
             if(caught) {
                 char again;
                 cout << "You got caught! Would you like to play again? (y/n): ";
@@ -297,6 +345,19 @@ int main() {
                     cout << "Thanks for playing, bye now!\n";
                 }
                 break;
+            }
+
+            if(map.empty()) {
+                cout << "You got everything! Good job and you win!" << endl;
+                char again;
+                cout << "Would you like to play again? (y/n): ";
+                cin >> again;
+                if(tolower(again) != 'y') {
+                    playing = true;
+                } else {
+                    playing = false;
+                    cout << "Thanks for playing, bye now!\n" << endl;
+                }
             }
         } while(!caught && playing);
     }
